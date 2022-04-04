@@ -38,36 +38,28 @@ class TagFix_Opening_Hours(Plugin):
         self.errors[32501] = self.def_class(item = 3250, level = 3, tags = ['value', 'fix:chair'],
             title = T_('Invalid Opening Hours'))
 
-    # Function is also called from ConditionalRestrictions
-    def sanitize_openinghours(self, openinghours_value):
-        if not module_PyKOpeningHours:
+    def sanitize_tags(self, tags):
+        if 'opening_hours' not in tags:
             return
+
         parser = OpeningHours()
-        parser.setExpression(openinghours_value)
+        parser.setExpression(tags['opening_hours'])
         if parser.error() == Error.SyntaxError or parser.error() == Error.IncompatibleMode:
-            return {"isValid": False}
+            return {"class": 32501, "subclass": 1, 'text': {'en': 'The opening_hours value is invalid and could not be parsed'}}
         sanitized_field = parser.normalizedExpression()
         # Ignore trivial changes that can be fixed by bots rather than humans like spaces, case errors, etc
         simplify = lambda s: s.replace(' ', '').replace('24:00', '00:00').replace('0', '').lower()
-        if simplify(sanitized_field) != simplify(openinghours_value):
-            return {"isValid": False, 'fix': sanitized_field}
-        return {"isValid": True}
+        if simplify(sanitized_field) != simplify(tags['opening_hours']):
+            return {"class": 32501, "subclass": 0, 'fix': {'opening_hours': sanitized_field}}
 
     def node(self, data, tags):
-        if 'opening_hours' not in tags:
-            return
-        sanitized = self.sanitize_openinghours(tags['opening_hours'])
-        if not sanitized['isValid']:
-            if "fix" in sanitized:
-                return {"class": 32501, "subclass": 0, 'fix': {'opening_hours': sanitized['fix']}}
-            else:
-                return {"class": 32501, "subclass": 1, 'text': T_("The `opening_hours` value is invalid and could not be parsed")}
+        return self.sanitize_tags(tags)
 
     def way(self, data, tags, nds):
-        return self.node(data, tags)
+        return self.sanitize_tags(tags)
 
     def relation(self, data, tags, members):
-        return self.node(data, tags)
+        return self.sanitize_tags(tags)
 
 
 ###########################################################################
@@ -83,8 +75,8 @@ class Test(TestPluginCommon):
         self.check_err(a.node(None, {'opening_hours': 'Monday to Friday 8:00AM to 4:30PM'}), expected={"class": 32501, "subclass": 0, 'fix': {'opening_hours': 'Mo-Fr 08:00-16:30'}})
 
         # These return a parse error
-        self.check_err(a.node(None, {'opening_hours': 'mo-fr 10h - 19h00"'}), expected={"class": 32501, "subclass": 1, 'text': T_("The `opening_hours` value is invalid and could not be parsed")})
-        self.check_err(a.node(None, {'opening_hours': '09:00-21:00 TEL/072(360)3200'}), expected={"class": 32501, "subclass": 1, 'text': T_("The `opening_hours` value is invalid and could not be parsed")})
+        self.check_err(a.node(None, {'opening_hours': 'mo-fr 10h - 19h00"'}), expected={"class": 32501, "subclass": 1, 'text': {'en': 'The opening_hours value is invalid and could not be parsed'}})
+        self.check_err(a.node(None, {'opening_hours': '09:00-21:00 TEL/072(360)3200'}), expected={"class": 32501, "subclass": 1, 'text': {'en': 'The opening_hours value is invalid and could not be parsed'}})
 
         # These are OK, no suggestion
         assert not a.node(None, {'opening_hours': 'Mo-Fr 10:00-19:00'})
